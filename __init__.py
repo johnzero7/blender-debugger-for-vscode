@@ -22,10 +22,10 @@ bl_info = {
    'name': 'Debugger for VS Code',
    'author': 'Alan North',
    'version': (2, 2, 1),
-   'blender': (2, 80, 0), # supports 2.8+
+   'blender': (2, 80, 0), # supports 2.8+ (python 3.7+)
    "description": "Starts debugging server for VS Code.",
    'location': 'In search (Edit > Operator Search) type "Debug"',
-   "warning": "",
+   "warning": "Requires installation of dependencies",
    "wiki_url": "https://github.com/AlansCodeLog/blender-debugger-for-vscode",
    "tracker_url": "https://github.com/AlansCodeLog/blender-debugger-for-vscode/issues",
    'category': 'Development',
@@ -35,76 +35,113 @@ import os
 import re
 import subprocess
 import sys
+import sysconfig
 
 import bpy
 
+from .import dependency_manager as dep
+
+NOT_FOUND_MESSAGE = "debugpy not found"
+
+
+# Declare all modules that this add-on depends on, that may need to be installed. The package and (global) name can be
+# set to None, if they are equal to the module name. See import_module and ensure_and_import_module for the explanation
+# of the arguments. DO NOT use this to import other parts of your Python add-on, import them as usual with an
+# "import" statement.
+
+dep.dependencies = (
+    dep.Dependency(module="debugpy"),
+)
+
+# pass the globals() to the manager to dinamically import and make the alias available
+# to other parts of the code
+dep.main_globals = globals()
+
+# Select to manage the instalations of each package separattly or all together
+# Default is True
+dep.manage_individually = False
+
+
 
 # finds path to debugpy if it exists
-def check_for_debugpy():
+def check_for_debugpy() -> None | str:
+
+   # 1# Check the platform libraries from
+   # Blender embbeded Python’s configuration path
+   path = sysconfig.get_path("platlib")
+   if path:
+      path = os.path.normpath(path)
+      if os.path.exists(os.path.join(path, "debugpy")):
+         return path
+
+   # 2# check in path just in case PYTHONPATH happens to be set
+   # this is not going to work because Blender's sys.path is different
+   for path in sys.path:
+      path = os.path.normpath(path)
+      if os.path.exists(os.path.join(path, "debugpy")):
+         return path
+      if os.path.exists(os.path.join(path, "site-packages","debugpy")):
+         return os.path.join(path, "site-packages")
+      if os.path.exists(os.path.join(path, "lib","site-packages","debugpy")):
+         return os.path.join(path, "lib","site-packages")
+
+   # 3# Check if debugpy is installed in the runing python (python embedded in Blender)
    pip_info = None
    try:
       pip_info = subprocess.Popen(
-          "pip show debugpy",
-          shell=True,
-          stdout=subprocess.PIPE,
-          stderr=subprocess.PIPE
+         "pip show debugpy",
+         shell=True,
+         stdout=subprocess.PIPE,
+         stderr=subprocess.PIPE
       )
    except Exception as e:
       print(e)
-      pass
+
    if pip_info is not None:
       pip_info = str(pip_info.communicate()[0], "utf-8")
-      pip_info = re.sub("\\\\", "/", pip_info)
+      pip_info = pip_info.splitlines()
       #extract path up to last slash
-      match = re.search("Location: (.*)", pip_info)
-      #normalize slashes
-      if match is not None:
-         match = match.group(1).rstrip()
-         if os.path.exists(match+"/debugpy"):
-            return match
+      for match in [x for x in pip_info if "Location: " in x]:
+         match = re.search("Location: (.*)", match)
+         #normalize slashes
+         if match is not None:
+            match = match.group(1).rstrip()
+            match = os.path.normpath(match)
+            if os.path.exists(os.path.join(match, "debugpy")):
+               return match
 
-  # commands to check
+   # 4# search in the system path. python instalations
    checks = [
-       ["where", "python"],
-       ["whereis", "python"],
-       ["which", "python"],
+      ["where", "python"],
+      ["whereis", "python"],
+      ["which", "python"],
    ]
    location = None
    for command in checks:
       try:
          location = subprocess.Popen(
-             command,
-             shell=True,
-             stdout=subprocess.PIPE,
-             stderr=subprocess.PIPE
+            command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
          )
-      except Exception:
+      except Exception as e:
+         print(e)
          continue
+
       if location is not None:
          location = str(location.communicate()[0], "utf-8")
-         #normalize slashes
-         location = re.sub("\\\\", "/", location)
-         #extract path up to last slash
-         match = re.search(".*(/)", location)
-         if match is not None:
-            match = match.group(1)
-            if os.path.exists(match+"lib/site-packages/debugpy"):
-               match = match+"lib/site-packages"
-               return match
+         for path in location.splitlines():
+            path = os.path.dirname(os.path.normpath(path))
+            if os.path.exists(os.path.join(path, "lib","site-packages","debugpy")):
+               path = os.path.join(path, "lib","site-packages")
+               return path
 
-   # check in path just in case PYTHONPATH happens to be set
-   # this is not going to work because Blender's sys.path is different
-   for path in sys.path:
-      path = path.rstrip("/")
-      if os.path.exists(path+"/debugpy"):
-         return path
-      if os.path.exists(path+"/site-packages/debugpy"):
-         return path+"/site-packages"
-      if os.path.exists(path+"/lib/site-packages/debugpy"):
-         return path+"lib/site-packages"
-   return "debugpy not Found"
+   return NOT_FOUND_MESSAGE
+
 
 # Preferences
+#########################################################################
 class DebuggerPreferences(bpy.types.AddonPreferences):
    bl_idname = __name__
 
@@ -127,9 +164,21 @@ class DebuggerPreferences(bpy.types.AddonPreferences):
    )
    def draw(self, context):
       layout = self.layout
+
+      # add this call to draw the addon preferences
+      dep.dependency_manager_ui(self, context, layout)
+
+      if not dep.check_all_dependencies():
+         return
+
       row_path = layout
       row_path.label(text="The addon will try to auto-find the location of debugpy, if no path is found, or you would like to use a different path, set it here.")
       row_path.prop(self, "path")
+      row_path.operator(
+         DebuggerPathUpdate.bl_idname,
+         text="Update Path",
+         icon="CONSOLE",
+      )
 
       row_timeout = layout.split()
       row_timeout.prop(self, "timeout")
@@ -143,7 +192,7 @@ class DebuggerPreferences(bpy.types.AddonPreferences):
 # check if debugger has attached
 def check_done(i, modal_limit, prefs):
    if i == 0 or i % 60 == 0:
-      print("Waiting... (on port "+str(prefs.port)+")")
+      print(f"Waiting... (on port {prefs.port})")
    if i > modal_limit:
       print("Attach Confirmation Listener Timed Out")
       return {"CANCELLED"}
@@ -151,6 +200,7 @@ def check_done(i, modal_limit, prefs):
       return {"PASS_THROUGH"}
    print('Debugger is Attached')
    return {"FINISHED"}
+
 
 class DebuggerCheck(bpy.types.Operator):
    bl_idname = "debug.check_for_debugger"
@@ -185,6 +235,25 @@ class DebuggerCheck(bpy.types.Operator):
       wm = context.window_manager
       wm.event_timer_remove(self._timer)
 
+
+# Operators
+#######################################################################
+class DebuggerPathUpdate(bpy.types.Operator):
+   bl_idname = "debug.update_debugger_path"
+   bl_label = "Look for debugger"
+   bl_description = "Searches for the location of the debugger"
+
+   def execute(self, context):
+      try:
+         addon_prefs = bpy.context.preferences.addons[__name__].preferences
+         addon_prefs.path = check_for_debugpy()
+      except subprocess.CalledProcessError as err:
+         self.report({"ERROR"}, str(err))
+         return {"CANCELLED"}
+
+      return {"FINISHED"}
+
+
 class DebugServerStart(bpy.types.Operator):
    bl_idname = "debug.connect_debugger_vscode"
    bl_label = "Debug: Start Debug Server for VS Code"
@@ -193,21 +262,22 @@ class DebugServerStart(bpy.types.Operator):
    waitForClient: bpy.props.BoolProperty(default=False)
 
    def execute(self, context):
-      #get debugpy and import if exists
+      # get debugpy and import if exists
       prefs = bpy.context.preferences.addons[__name__].preferences
-      debugpy_path = prefs.path.rstrip("/")
+      debugpy_path = prefs.path
       debugpy_port = prefs.port
 
-      #actually check debugpy is still available
-      if debugpy_path == "debugpy not found":
+      # actually check debugpy is still available
+      if debugpy_path == NOT_FOUND_MESSAGE:
          self.report({"ERROR"}, "Couldn't detect debugpy, please specify the path manually in the addon preferences or reload the addon if you installed debugpy after enabling it.")
          return {"CANCELLED"}
 
-      if not os.path.exists(os.path.abspath(debugpy_path+"/debugpy")):
-         self.report({"ERROR"}, "Can't find debugpy at: %r/debugpy." % debugpy_path)
+      if not os.path.exists(os.path.abspath(os.path.join(debugpy_path, "debugpy"))):
+         self.report({"ERROR"}, f"Can't find debugpy at-: {os.path.join(debugpy_path,'debugpy')}.")
          return {"CANCELLED"}
 
-      if not any(debugpy_path in p for p in sys.path):
+      # if the folder is not in the path, add it to be able to import
+      if debugpy_path not in sys.path:
          sys.path.append(debugpy_path)
 
       global debugpy #so we can do check later
@@ -227,12 +297,33 @@ class DebugServerStart(bpy.types.Operator):
       bpy.ops.debug.check_for_debugger()
       return {"FINISHED"}
 
-classes = (
-   DebuggerPreferences,
+
+dep.dependant_classes = (
    DebuggerCheck,
    DebugServerStart,
 )
-register, unregister = bpy.utils.register_classes_factory(classes)
+
+
+preference_classes = (
+   DebuggerPreferences,
+   DebuggerPathUpdate,
+)
+
+
+register_preference, unregister_preference = bpy.utils.register_classes_factory(
+   preference_classes
+)
+
+
+def register():
+   register_preference()
+   dep.register()
+
+
+def unregister():
+   dep.unregister()
+   unregister_preference()
+
 
 if __name__ == "__main__":
    register()
