@@ -9,26 +9,24 @@ class DebuggerPreferences(bpy.types.AddonPreferences):
 
    timeout: bpy.props.IntProperty(
       name="Timeout",
-      default=20
+      default=20,
+      description="Timeout in seconds for the attach confirmation listener.",
    )
 
    port: bpy.props.IntProperty(
       name="Port",
-      min=0,
+      min=1024,
       max=65535,
-      default=5678
+      default=5678,
+      description="Port to use. Should match port in VS Code's launch.json",
    )
 
    def draw(self, context):
       layout = self.layout
 
-      row_timeout = layout.split()
-      row_timeout.prop(self, "timeout")
-      row_timeout.label(text="Timeout in seconds for the attach confirmation listener.")
-
-      row_port = layout.split()
-      row_port.prop(self, "port")
-      row_port.label(text="Port to use. Should match port in VS Code's launch.json.")
+      layout.use_property_split = True
+      layout.prop(self, "port")
+      layout.prop(self, "timeout")
 
 
 # check if debugger has attached
@@ -96,7 +94,10 @@ class DebugServerStart(bpy.types.Operator):
       try:
          debugpy.listen(("localhost", debugpy_port))
       except:
-         print("Server already running.")
+         msg = f"Remote python debugger failed to start (or already started) on port {debugpy_port}."
+         self.report({'WARNING'}, msg)
+         print(msg)
+         return {"CANCELLED"}
 
       if (self.waitForClient):
          self.report({"INFO"}, "Blender Debugger for VSCode: Awaiting Connection")
