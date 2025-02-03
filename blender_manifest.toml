@@ -10,6 +10,6 @@ blender_version_min = "4.2.0"
 license = ["SPDX:GPL-3.0-or-later"]
 website = "https://github.com/AlansCodeLog/blender-debugger-for-vscode"
 wheels = [
-  "./wheels/debugpy-1.8.2-cp312-cp312-win_amd64.whl",
+  "./wheels/debugpy-1.8.12-cp311-cp311-win_amd64.whl",
 ]
 copyright = ["2018 Alan North"]
