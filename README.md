@@ -144,7 +144,7 @@ Go to the Debugging tab and select `create a lauch.json file`. Pick `Python Debu
             "pathMappings": [
                 {
                     "localRoot": "${workspaceFolder}",
-                    "remoteRoot": "."       //change "." for "${workspaceFolder}" like the line avobe
+                    "remoteRoot": "." //change "." for "${workspaceFolder}" like the line above
                 }
             ]
         }
