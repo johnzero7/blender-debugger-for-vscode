@@ -1,0 +1,40 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python Debugger: Remote Attach",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    // Information from
+                    // https://code.visualstudio.com/docs/python/debugging#_set-configuration-options
+                    // Folder of the source code
+                    "localRoot": "${workspaceFolder}",
+                    // the relative folder where the Python process is running on the remote side
+                    // for example
+                    // "remoteRoot": "." => is the location of the Blender.exe file executing the process
+                    // The solution is to asign the folder where the Blender extension is installed
+                    // "remoteRoot": "C:\Users\<user>\AppData\Roaming\Blender Foundation\Blender\<version>\extensions\blender_org\some_addon",
+                    // If you open in VSCode the folder of the installed addon both parameter can have the value "${workspaceFolder}"
+                    "remoteRoot": "${workspaceFolder}",
+                }
+            ],
+            "justMyCode": true
+        }
+    ]
+}
