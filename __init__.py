@@ -1,3 +1,7 @@
+import itertools
+import sys
+import time
+
 import bpy
 import debugpy
 
@@ -29,103 +33,128 @@ class DebuggerPreferences(bpy.types.AddonPreferences):
         layout.prop(self, "timeout")
 
 
-# check if debugger has attached
-def check_done(i, modal_limit, prefs):
-    if i == 0 or i % 60 == 0:
-        print(f"Waiting... (on port {prefs.port})")
-    if i > modal_limit:
-        print("Attach Confirmation Listener Timed Out")
-        return {"CANCELLED"}
-    if not debugpy.is_client_connected():
-        return {"PASS_THROUGH"}
-    print("Debugger is Attached")
-    return {"FINISHED"}
-
-
+# Operators
+#########################################################################
 class DebuggerCheck(bpy.types.Operator):
+    """
+    Poll for a cliente conection until:
+    - Succesfull client connection
+    - Timeout
+    """
+
     bl_idname = "debug.check_for_debugger"
     bl_label = "Debug: Check if VS Code is Attached"
     bl_description = "Starts modal timer that checks if debugger attached until attached or until timeout"
 
-    _timer = None
-    count = 0
-    modal_limit = 20 * 60
-
-    # call check_done
     def modal(self, context, event):
-        self.count = self.count + 1
         if event.type == "TIMER":
             prefs = bpy.context.preferences.addons[__package__].preferences
-            return check_done(self.count, self.modal_limit, prefs)
+            now = time.time()
+            time_diff = now - self._start_time
+
+            remaining_seconds = prefs.timeout - time_diff
+            clear_line = "\033[K"
+
+            # Print activity message
+            console_text = f"\r{next(self._spinner)} Waiting for connection on port: {prefs.port} (Timeout: {int(remaining_seconds)+1}{clear_line})"
+            sys.stdout.write(console_text)
+            sys.stdout.flush()
+
+            # Connected
+            if debugpy.is_client_connected():
+                msg = "Debugpy client connected!"
+                self.report({"INFO"}, msg)
+                print()
+                print(f"{msg}")
+                self.cleaunp(context)
+                return {"FINISHED"}
+
+            # Timeout
+            if time_diff > prefs.timeout:
+                msg = f"Debugpy attach timeout after {prefs.timeout} seconds"
+                self.report({"WARNING"}, msg)
+                print()
+                print(f"{msg}")
+                self.cleaunp(context)
+                return {"CANCELLED"}
+
+        # To not block other interacion with blender
         return {"PASS_THROUGH"}
 
     def execute(self, context):
         # set initial variables
-        self.count = 0
-        prefs = bpy.context.preferences.addons[__package__].preferences
-        self.modal_limit = prefs.timeout * 60
-
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         wm.modal_handler_add(self)
+
+        spinner_frames = ["⠏", "⠛", "⠹", "⢸", "⣰", "⣤", "⣆", "⡇"]
+        self._spinner = itertools.cycle(spinner_frames)
+        self._start_time = time.time()
         return {"RUNNING_MODAL"}
 
+    def cleaunp(self, context):
+        if self._timer:
+            context.window_manager.event_timer_remove(self._timer)
+            self._timer = None
+
     def cancel(self, context):
-        print("Debugger Confirmation Cancelled")
-        wm = context.window_manager
-        wm.event_timer_remove(self._timer)
+        msg = "Debugpy wait → cancelled"
+        self.report({"INFO"}, msg)
+        print(msg)
+        self.cleaunp(context)
 
 
-# Operators
-#######################################################################
 class DebugServerStart(bpy.types.Operator):
+    """
+    Initialize the debug server then poll for a client connection
+    """
+
     bl_idname = "debug.connect_debugger_vscode"
     bl_label = "Debug: Start Debug Server for VS Code"
     bl_description = "Starts debugpy server for debugger to attach to"
 
-    waitForClient: bpy.props.BoolProperty(default=False)
-
     def execute(self, context):
-        # get debugpy and import if exists
-        prefs = bpy.context.preferences.addons[__package__].preferences
+        prefs = context.preferences.addons[__package__].preferences
         debugpy_port = prefs.port
 
         # can only be attached once, no way to detach (at least not that I understand?)
         try:
             debugpy.listen(("localhost", debugpy_port))
-        except:
-            msg = f"Remote python debugger failed to start (or already started) on port {debugpy_port}."
+        except RuntimeError as e:
+            # Usually means already listening
+            msg = f"debugpy already listening on port {debugpy_port} or failed: {e}"
             self.report({"WARNING"}, msg)
             print(msg)
             return {"CANCELLED"}
-
-        if self.waitForClient:
-            self.report({"INFO"}, "Blender Debugger for VSCode: Awaiting Connection")
-            debugpy.wait_for_client()
+        except Exception as e:
+            msg = f"debugpy listen failed: {e}"
+            self.report({"ERROR"}, msg)
+            print(msg)
+            return {"CANCELLED"}
 
         # call our confirmation listener
         bpy.ops.debug.check_for_debugger()
         return {"FINISHED"}
 
 
-preference_classes = (
+# Registration
+#########################################################################
+classes = (
     DebuggerCheck,
     DebugServerStart,
     DebuggerPreferences,
 )
 
 
-register_preference, unregister_preference = bpy.utils.register_classes_factory(
-    preference_classes
-)
+_register, _unregister = bpy.utils.register_classes_factory(classes)
 
 
 def register():
-    register_preference()
+    _register()
 
 
 def unregister():
-    unregister_preference()
+    _unregister()
 
 
 if __name__ == "__main__":
