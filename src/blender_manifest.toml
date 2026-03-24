@@ -1,19 +1,30 @@
 schema_version = "1.0.0"
+
+
 id = "blender_debugger_for_vscode"
 name = "Debugger for VS Code"
-version = "2.4.0"
+version = "3.0.0"
 tagline = "Blender addon for remote debugging python code with VSCode"
 maintainer = "johnzero7 <johnzero7@gmail.com>"
 type = "add-on"
-tags = ["Development"]
+tags = [
+    "Development",
+]
 blender_version_min = "4.2.0"
 blender_version_max = ""
-license = ["SPDX:GPL-3.0-or-later"]
+license = [
+    "SPDX:GPL-3.0-or-later",
+]
 website = "https://github.com/AlansCodeLog/blender-debugger-for-vscode"
-platforms = ["windows-x64", "macos-x64", "linux-x64"]
+platforms = [
+    "windows-x64",
+    "macos-x64",
+    "linux-x64"
+]
 wheels = []
-
-copyright = ["2018 Alan North"]
+copyright = [
+    "2018 Alan North",
+]
 [build]
 paths_exclude_pattern = [
     "__pycache__/",

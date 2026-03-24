@@ -1,3 +1,12 @@
+"""
+
+Inspired by: https://github.com/AlansCodeLog/blender-debugger-for-vscode
+
+Notes:
+* As of 5/3/2022 debugpy provides no methods to stop the server.
+    The only way to stop it is to close the proccess that intiated it (Blender.exe)
+"""
+
 import itertools
 import sys
 import time
@@ -43,7 +52,7 @@ class DebuggerCheck(bpy.types.Operator):
     """
 
     bl_idname = "debug.check_for_debugger"
-    bl_label = "Debug: Check if VS Code is Attached"
+    bl_label = "Debug: Check if Client is Attached"
     bl_description = "Starts modal timer that checks if debugger attached until attached or until timeout"
 
     def modal(self, context, event):
@@ -110,7 +119,7 @@ class DebugServerStart(bpy.types.Operator):
     """
 
     bl_idname = "debug.connect_debugger_vscode"
-    bl_label = "Debug: Start Debug Server for VS Code"
+    bl_label = "Debug: Start Debug Server"
     bl_description = "Starts debugpy server for debugger to attach to"
 
     def execute(self, context):
@@ -137,23 +146,34 @@ class DebugServerStart(bpy.types.Operator):
         return {"FINISHED"}
 
 
+# Draw the main menu entry for:
+#   {Blender Icon} -> System -> Debug: Start Debug Server
+#                             + Debug: Check if Client is Attached
+def python_debugger_menu(self, context):
+    self.layout.separator()
+    self.layout.operator(DebugServerStart.bl_idname, icon="SCRIPT")
+    self.layout.operator(DebuggerCheck.bl_idname, icon="SCRIPT")
+
+
 # Registration
 #########################################################################
-classes = (
+_classes = (
     DebuggerCheck,
     DebugServerStart,
     DebuggerPreferences,
 )
 
 
-_register, _unregister = bpy.utils.register_classes_factory(classes)
+_register, _unregister = bpy.utils.register_classes_factory(_classes)
 
 
 def register():
     _register()
+    bpy.types.TOPBAR_MT_blender_system.append(python_debugger_menu)
 
 
 def unregister():
+    bpy.types.TOPBAR_MT_blender_system.remove(python_debugger_menu)
     _unregister()
 
 
