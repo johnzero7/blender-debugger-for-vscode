@@ -1,0 +1,5 @@
+# Dependencies for package generation automation
+
+tomlkit==0.14.0
+tomli_w==1.2.0
+python-dotenv==1.2.2
