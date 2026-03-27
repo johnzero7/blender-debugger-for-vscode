@@ -26,12 +26,10 @@
                     // Folder of the source code
                     "localRoot": "${workspaceFolder}",
                     // the relative folder where the Python process is running on the remote side
-                    // for example
+                    "remoteRoot": "${workspaceFolder}",
                     // "remoteRoot": "." => is the location of the Blender.exe file executing the process
                     // The solution is to asign the folder where the Blender extension is installed
-                    // "remoteRoot": "C:\Users\<user>\AppData\Roaming\Blender Foundation\Blender\<version>\extensions\blender_org\some_addon",
-                    // If you open in VSCode the folder of the installed addon both parameter can have the value "${workspaceFolder}"
-                    "remoteRoot": "${workspaceFolder}",
+                    // both parameters must have the value "${workspaceFolder}"
                 }
             ],
             "justMyCode": true

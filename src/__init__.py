@@ -122,6 +122,8 @@ class DebugServerStart(bpy.types.Operator):
     bl_label = "Debug: Start Debug Server"
     bl_description = "Starts debugpy server for debugger to attach to"
 
+    waitForClient: bpy.props.BoolProperty(default=False)
+
     def execute(self, context):
         prefs = context.preferences.addons[__package__].preferences
         debugpy_port = prefs.port
@@ -141,6 +143,10 @@ class DebugServerStart(bpy.types.Operator):
             print(msg)
             return {"CANCELLED"}
 
+        if self.waitForClient:
+            self.report({"INFO"}, "Blender Debugger for VS Code: Awaiting Connection")
+            debugpy.wait_for_client()
+
         # call our confirmation listener
         bpy.ops.debug.check_for_debugger()
         return {"FINISHED"}
@@ -150,9 +156,10 @@ class DebugServerStart(bpy.types.Operator):
 #   {Blender Icon} -> System -> Debug: Start Debug Server
 #                             + Debug: Check if Client is Attached
 def python_debugger_menu(self, context):
-    self.layout.separator()
-    self.layout.operator(DebugServerStart.bl_idname, icon="SCRIPT")
-    self.layout.operator(DebuggerCheck.bl_idname, icon="SCRIPT")
+    if bpy.context.preferences.view.show_developer_ui:
+        self.layout.separator()
+        self.layout.operator(DebugServerStart.bl_idname, icon="SCRIPT")
+        self.layout.operator(DebuggerCheck.bl_idname, icon="SCRIPT")
 
 
 # Registration

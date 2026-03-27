@@ -1,10 +1,10 @@
 schema_version = "1.0.0"
 
 
-id = "blender_debugger_for_vscode"
-name = "Debugger for VS Code"
+id = "blender_addon_debugger_for_vscode"
+name = "Blender Addon Debugger for VS Code"
 version = "3.0.0"
-tagline = "Blender addon for remote debugging python code with VSCode"
+tagline = "Blender addon for remote debugging python code with VS Code"
 maintainer = "johnzero7 <johnzero7@gmail.com>"
 type = "add-on"
 tags = [
