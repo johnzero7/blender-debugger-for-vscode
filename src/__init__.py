@@ -1,5 +1,5 @@
 """
-
+Start a debug server to debug addons and python code in blender
 Inspired by: https://github.com/AlansCodeLog/blender-debugger-for-vscode
 
 Notes:
@@ -152,14 +152,72 @@ class DebugServerStart(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class TEXT_OT_debug_run(bpy.types.Operator):
+    """Run the current text as a script compatible with the VS Code Debugger"""
+
+    bl_idname = "text.debug_run"
+    bl_label = "Debug"
+    bl_description = "Run the current script (Debug mode)"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        # Get the current text editor
+        text = context.space_data.text
+        # text.internal = True
+
+        print(text.filepath)
+        if not text:
+            self.report({"WARNING"}, "No text block to run")
+            return {"CANCELLED"}
+
+        if not text.filepath:
+            self.report(
+                {"WARNING"},
+                "The current text block must be saved to a file to run in debug mode",
+            )
+            return {"CANCELLED"}
+
+        try:
+            global_namespace = {"__file__": text.filepath, "__name__": "__main__"}
+            # Run the script
+            exec(compile(text.as_string(), text.name, "exec"), global_namespace)
+
+            self.report({"INFO"}, f"Script executed: {text.name}")
+            return {"FINISHED"}
+
+        except Exception as e:
+            # Show the error in the Info window and console
+            self.report({"ERROR"}, f"Error running script: {e}")
+            print(f"--- Debug Run Error in {text.name} ---")
+            import traceback
+
+            traceback.print_exc()
+            return {"CANCELLED"}
+
+
 # Draw the main menu entry for:
 #   {Blender Icon} -> System -> Debug: Start Debug Server
 #                             + Debug: Check if Client is Attached
-def python_debugger_menu(self, context):
+def draw_python_debugger_blender_system_menu(self, context):
     if bpy.context.preferences.view.show_developer_ui:
-        self.layout.separator()
+        self.layout.separator(factor=1.0)
         self.layout.operator(DebugServerStart.bl_idname, icon="SCRIPT")
         self.layout.operator(DebuggerCheck.bl_idname, icon="SCRIPT")
+
+
+def draw_python_debugger_text_editor_menu(self, context):
+    """Draw function that gets appended to the Text Editor header"""
+    layout = self.layout
+
+    # This adds a separator so the button appears nicely after "Run Script"
+    layout.separator(factor=1.0)
+
+    # The button with bug icon
+    layout.operator(
+        TEXT_OT_debug_run.bl_idname,
+        text="Debug",
+        icon="FILE_SCRIPT",
+    )
 
 
 # Registration
@@ -168,6 +226,7 @@ _classes = (
     DebuggerCheck,
     DebugServerStart,
     DebuggerPreferences,
+    TEXT_OT_debug_run,
 )
 
 
@@ -176,11 +235,13 @@ _register, _unregister = bpy.utils.register_classes_factory(_classes)
 
 def register():
     _register()
-    bpy.types.TOPBAR_MT_blender_system.append(python_debugger_menu)
+    bpy.types.TOPBAR_MT_blender_system.append(draw_python_debugger_blender_system_menu)
+    bpy.types.TEXT_HT_header.append(draw_python_debugger_text_editor_menu)
 
 
 def unregister():
-    bpy.types.TOPBAR_MT_blender_system.remove(python_debugger_menu)
+    bpy.types.TOPBAR_MT_blender_system.remove(draw_python_debugger_blender_system_menu)
+    bpy.types.TEXT_HT_header.remove(draw_python_debugger_text_editor_menu)
     _unregister()
 
 
