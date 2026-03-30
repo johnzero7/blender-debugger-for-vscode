@@ -1,15 +1,19 @@
 """
 Start a debug server to debug addons and python code in blender
+Allows to debug Blender addons and python scripts with the VS Code Debugger using debugpy.
 Inspired by: https://github.com/AlansCodeLog/blender-debugger-for-vscode
 
 Notes:
-* As of 5/3/2022 debugpy provides no methods to stop the server.
+* As of 5/3/2022 debugpy provides no methods to stop the debug server once started.
     The only way to stop it is to close the proccess that intiated it (Blender.exe)
 """
 
 import itertools
+import os
+import pathlib
 import sys
 import time
+from contextlib import contextmanager
 
 import bpy
 import debugpy
@@ -152,6 +156,29 @@ class DebugServerStart(bpy.types.Operator):
         return {"FINISHED"}
 
 
+@contextmanager
+def run_in_context(script_path: str | os.PathLike):
+    """
+    Context manager to modify:
+        - Current workin directory
+        - Directories included in the system path
+    this allows runing stand alone scripts files in the dubuger
+    """
+
+    path: pathlib.Path = pathlib.Path(script_path)
+    original_cwd: str = os.getcwd()
+    original_sys_path: list[str] = sys.path.copy()
+
+    try:
+        os.chdir(str(path.parent))
+        sys.path.append(str(path.parent))
+
+        yield
+    finally:
+        os.chdir(original_cwd)
+        sys.path[:] = original_sys_path
+
+
 class TEXT_OT_debug_run(bpy.types.Operator):
     """Run the current text as a script compatible with the VS Code Debugger"""
 
@@ -163,26 +190,46 @@ class TEXT_OT_debug_run(bpy.types.Operator):
     def execute(self, context):
         # Get the current text editor
         text = context.space_data.text
-        # text.internal = True
 
-        print(text.filepath)
-        if not text:
-            self.report({"WARNING"}, "No text block to run")
+        if text.is_in_memory:
+            self.report({"ERROR"}, "Cannot run internal text blocks in debug mode")
             return {"CANCELLED"}
 
-        if not text.filepath:
+        if not text:
+            self.report({"ERROR"}, "No text block to run")
+            return {"CANCELLED"}
+
+        filepath = pathlib.Path(text.filepath)
+
+        if not filepath.is_file():
             self.report(
-                {"WARNING"},
+                {"ERROR"},
+                "The current text block must be saved to a file to run in debug mode",
+            )
+            return {"CANCELLED"}
+
+        if not filepath.exists():
+            self.report(
+                {"ERROR"},
                 "The current text block must be saved to a file to run in debug mode",
             )
             return {"CANCELLED"}
 
         try:
-            global_namespace = {"__file__": text.filepath, "__name__": "__main__"}
-            # Run the script
-            exec(compile(text.as_string(), text.name, "exec"), global_namespace)
+            global_namespace = {
+                "__file__": str(filepath),
+                "__name__": "__main__",
+            }
+            # change the current working directory to the script's directory and add it to sys.path so imports work as expected
+            with run_in_context(filepath):
+                # Work from the version saved on disk
+                with open(filepath, "r") as file:
+                    exec(
+                        compile(file.read(), filepath.name, "exec"),
+                        globals=global_namespace,
+                    )
 
-            self.report({"INFO"}, f"Script executed: {text.name}")
+            self.report({"INFO"}, f"Script executed: {filepath.name}")
             return {"FINISHED"}
 
         except Exception as e:
