@@ -13,6 +13,7 @@ import os
 import pathlib
 import sys
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 
 import bpy
@@ -157,26 +158,49 @@ class DebugServerStart(bpy.types.Operator):
 
 
 @contextmanager
-def run_in_context(script_path: str | os.PathLike):
+def run_in_context(script_path: str | os.PathLike[str]) -> Iterator[None]:
     """
-    Context manager to modify:
-        - Current workin directory
-        - Directories included in the system path
-    this allows runing stand alone scripts files in the dubuger
-    """
+    Context manager that sets up the environment to run a standalone script as if
+    it were executed directly (via `python script.py`), but in blender.
 
-    path: pathlib.Path = pathlib.Path(script_path)
+    Changes made (and then restored):
+        - Current working directory → script's parent directory
+        - sys.path → script's parent directory is inserted at the front
+        - sys.dont_write_bytecode = True (prevents .pyc file generation)
+
+    Also it undoes changes made by the scripts
+        - Unload modules imported in the scripts to prebent side effects
+        - delete created globals
+    """
+    script_dir = str(pathlib.Path(script_path).parent)
+
+    # Preserve previous values
     original_cwd: str = os.getcwd()
     original_sys_path: list[str] = sys.path.copy()
+    original_dont_write_bytecode: bool = sys.dont_write_bytecode # prevent writing __pycache__
+    # Keep track of originally loaded modules to prevent side effects from imports in the script
+    original_modules = list(sys.modules.keys())
+    original_globals = list(globals().keys())
 
     try:
-        os.chdir(str(path.parent))
-        sys.path.append(str(path.parent))
+        os.chdir(script_dir)
+        sys.path.insert(0, script_dir)  # Important: insert at front
+        sys.dont_write_bytecode = True
 
         yield
+
     finally:
+        # Restore previous values
         os.chdir(original_cwd)
         sys.path[:] = original_sys_path
+        sys.dont_write_bytecode = original_dont_write_bytecode
+        # remove all modules that were imported during the script execution to prevent side effects
+        for name in list(sys.modules.keys()):
+            if name not in original_modules:
+                sys.modules.pop(name, None)
+        for name in list(globals().keys()):
+            if name not in original_globals:
+                globals().pop(name, None)
 
 
 class TEXT_OT_debug_run(bpy.types.Operator):
@@ -220,7 +244,6 @@ class TEXT_OT_debug_run(bpy.types.Operator):
                 "__file__": str(filepath),
                 "__name__": "__main__",
             }
-            # change the current working directory to the script's directory and add it to sys.path so imports work as expected
             with run_in_context(filepath):
                 # Work from the version saved on disk
                 with open(filepath, "r") as file:
