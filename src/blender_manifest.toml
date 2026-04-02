@@ -29,11 +29,11 @@ platforms = [
     "macos-x64",
     "linux-x64"
 ]
+
 wheels = []
 
 [permissions]
-# Read/write access to user's local disk
-files = "Required read python files being debugged."
+files = "Required to read python files being debugged."
 
 [build]
 paths_exclude_pattern = [
