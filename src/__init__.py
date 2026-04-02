@@ -248,7 +248,7 @@ class TEXT_OT_debug_run(bpy.types.Operator):
                 # Work from the version saved on disk
                 with open(filepath, "r") as file:
                     exec(
-                        compile(file.read(), filepath.name, "exec"),
+                        compile(file.read(), filepath, "exec"),
                         globals=global_namespace,
                     )
 
