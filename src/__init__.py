@@ -215,12 +215,12 @@ class TEXT_OT_debug_run(bpy.types.Operator):
         # Get the current text editor
         text = context.space_data.text
 
-        if text.is_in_memory:
-            self.report({"ERROR"}, "Cannot run internal text blocks in debug mode")
-            return {"CANCELLED"}
-
         if not text:
             self.report({"ERROR"}, "No text block to run")
+            return {"CANCELLED"}
+
+        if text.is_in_memory:
+            self.report({"ERROR"}, "Cannot run internal text blocks in debug mode")
             return {"CANCELLED"}
 
         filepath = pathlib.Path(text.filepath)
