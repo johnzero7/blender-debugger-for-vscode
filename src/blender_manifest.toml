@@ -33,7 +33,7 @@ platforms = [
 wheels = []
 
 [permissions]
-files = "Required to read python files being debugged."
+files = "Required to read python files being debugged"
 
 [build]
 paths_exclude_pattern = [
