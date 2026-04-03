@@ -1,3 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 johnzero7
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
 """
 Start a debug server to debug addons and python code in blender
 Allows to debug Blender addons and python scripts with the VS Code Debugger using debugpy.
@@ -25,10 +42,10 @@ import debugpy
 class DebuggerPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
-    timeout: bpy.props.IntProperty(
-        name="Timeout",
-        default=20,
-        description="Timeout in seconds for the attach confirmation listener.",
+    host: bpy.props.StringProperty(
+        name="Host",
+        default="127.0.0.1",
+        description="Remote host to accept connections. If 0.0.0.0 will accept connections from any host. Should match host in VS Code's launch.json",
     )
 
     port: bpy.props.IntProperty(
@@ -39,10 +56,17 @@ class DebuggerPreferences(bpy.types.AddonPreferences):
         description="Port to use. Should match port in VS Code's launch.json",
     )
 
+    timeout: bpy.props.IntProperty(
+        name="Timeout",
+        default=20,
+        description="Timeout in seconds for the attach confirmation listener.",
+    )
+
     def draw(self, context):
         layout = self.layout
 
         layout.use_property_split = True
+        layout.prop(self, "host")
         layout.prop(self, "port")
         layout.prop(self, "timeout")
 
@@ -131,11 +155,11 @@ class DebugServerStart(bpy.types.Operator):
 
     def execute(self, context):
         prefs = context.preferences.addons[__package__].preferences
-        debugpy_port = prefs.port
+        debugpy_host, debugpy_port = prefs.host, prefs.port
 
         # can only be attached once, no way to detach (at least not that I understand?)
         try:
-            debugpy.listen(("localhost", debugpy_port))
+            debugpy.listen((debugpy_host, debugpy_port))
         except RuntimeError as e:
             # Usually means already listening
             msg = f"debugpy already listening on port {debugpy_port} or failed: {e}"
@@ -177,7 +201,9 @@ def run_in_context(script_path: str | os.PathLike[str]) -> Iterator[None]:
     # Preserve previous values
     original_cwd: str = os.getcwd()
     original_sys_path: list[str] = sys.path.copy()
-    original_dont_write_bytecode: bool = sys.dont_write_bytecode # prevent writing __pycache__
+    original_dont_write_bytecode: bool = (
+        sys.dont_write_bytecode
+    )  # prevent writing __pycache__
     # Keep track of originally loaded modules to prevent side effects from imports in the script
     original_modules = list(sys.modules.keys())
     original_globals = list(globals().keys())
