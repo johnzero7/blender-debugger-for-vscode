@@ -85,44 +85,44 @@ class DebuggerCheck(bpy.types.Operator):
     bl_description = "Starts modal timer that checks if debugger attached until attached or until timeout"
 
     def modal(self, context, event):
-        if event.type == "TIMER":
-            prefs = bpy.context.preferences.addons[__package__].preferences
-            now = time.time()
-            time_diff = now - self._start_time
+        if event.type != "TIMER":
+            return {"PASS_THROUGH"}
 
-            remaining_seconds = prefs.timeout - time_diff
-            clear_line = "\033[K"
+        prefs = context.preferences.addons[__package__].preferences
+        time_diff = time.time() - self._start_time
 
-            # Print activity message
-            console_text = f"\r{next(self._spinner)} Waiting for connection on port: {prefs.port} (Timeout: {int(remaining_seconds)+1}{clear_line})"
-            sys.stdout.write(console_text)
-            sys.stdout.flush()
+        remaining_seconds = prefs.timeout - time_diff
+        clear_line = "\033[K"
 
-            # Connected
-            if debugpy.is_client_connected():
-                msg = "Debugpy client connected!"
-                self.report({"INFO"}, msg)
-                print()
-                print(f"{msg}")
-                self.cleaunp(context)
-                return {"FINISHED"}
+        # Print activity message
+        console_text = f"\r{next(self._spinner)} Waiting for connection on port: {prefs.port} (Timeout: {int(remaining_seconds)+1}{clear_line})"
+        sys.stdout.write(console_text)
+        sys.stdout.flush()
 
-            # Timeout
-            if time_diff > prefs.timeout:
-                msg = f"Debugpy attach timeout after {prefs.timeout} seconds"
-                self.report({"WARNING"}, msg)
-                print()
-                print(f"{msg}")
-                self.cleaunp(context)
-                return {"CANCELLED"}
+        # Connected
+        if debugpy.is_client_connected():
+            msg = "Debugger client attached successfully!"
+            self.report({"INFO"}, msg)
+            print()
+            print(msg)
+            self.cleanup(context)
+            return {"FINISHED"}
 
-        # To not block other interacion with blender
+        # Timeout
+        if time_diff > prefs.timeout:
+            msg = f"Debugger attach timeout after {prefs.timeout} seconds"
+            self.report({"WARNING"}, msg)
+            print()
+            print(f"{msg}")
+            self.cleanup(context)
+            return {"CANCELLED"}
+
         return {"PASS_THROUGH"}
 
     def execute(self, context):
         # set initial variables
         wm = context.window_manager
-        self._timer = wm.event_timer_add(0.1, window=context.window)
+        self._timer = wm.event_timer_add(0.2, window=context.window)
         wm.modal_handler_add(self)
 
         spinner_frames = ["⠏", "⠛", "⠹", "⢸", "⣰", "⣤", "⣆", "⡇"]
@@ -130,16 +130,16 @@ class DebuggerCheck(bpy.types.Operator):
         self._start_time = time.time()
         return {"RUNNING_MODAL"}
 
-    def cleaunp(self, context):
+    def cleanup(self, context):
         if self._timer:
             context.window_manager.event_timer_remove(self._timer)
             self._timer = None
 
     def cancel(self, context):
-        msg = "Debugpy wait → cancelled"
+        msg = "Debugger wait cancelled"
         self.report({"INFO"}, msg)
         print(msg)
-        self.cleaunp(context)
+        self.cleanup(context)
 
 
 class DebugServerStart(bpy.types.Operator):
@@ -151,32 +151,40 @@ class DebugServerStart(bpy.types.Operator):
     bl_label = "Debug: Start Debug Server"
     bl_description = "Starts debugpy server for debugger to attach to"
 
-    waitForClient: bpy.props.BoolProperty(default=False)
+    wait_for_client: bpy.props.BoolProperty(
+        name="Wait for Client",
+        default=False,
+        description="Block until VS Code attaches (recommended for first-time setup)",
+    )
 
     def execute(self, context):
         prefs = context.preferences.addons[__package__].preferences
-        debugpy_host, debugpy_port = prefs.host, prefs.port
 
         # can only be attached once, no way to detach (at least not that I understand?)
         try:
-            debugpy.listen((debugpy_host, debugpy_port))
+            debugpy.listen((prefs.host, prefs.port))
         except RuntimeError as e:
             # Usually means already listening
-            msg = f"debugpy already listening on port {debugpy_port} or failed: {e}"
+            msg = f"Debugger already listening on port {prefs.port} or failed: {e}"
             self.report({"WARNING"}, msg)
             print(msg)
             return {"CANCELLED"}
         except Exception as e:
-            msg = f"debugpy listen failed: {e}"
+            msg = f"Debugger listen failed: {e}"
             self.report({"ERROR"}, msg)
             print(msg)
             return {"CANCELLED"}
+        else:
+            msg = f"Debugger listening on {prefs.host}:{prefs.port}"
+            self.report({"INFO"}, msg)
+            print(msg)
 
-        if self.waitForClient:
-            self.report({"INFO"}, "Blender Debugger for VS Code: Awaiting Connection")
+        if self.wait_for_client:
+            msg = "Waiting for debugger client to attach..."
+            self.report({"INFO"}, msg)
             debugpy.wait_for_client()
 
-        # call our confirmation listener
+        # Start visual confirmation modal
         bpy.ops.debug.check_for_debugger()
         return {"FINISHED"}
 
@@ -201,22 +209,22 @@ def run_in_context(script_path: str | os.PathLike[str]) -> Iterator[None]:
     # Preserve previous values
     original_cwd: str = os.getcwd()
     original_sys_path: list[str] = sys.path.copy()
-    original_dont_write_bytecode: bool = (
-        sys.dont_write_bytecode
-    )  # prevent writing __pycache__
+    # prevent writing __pycache__
+    original_dont_write_bytecode: bool = sys.dont_write_bytecode
     # Keep track of originally loaded modules to prevent side effects from imports in the script
-    original_modules = list(sys.modules.keys())
-    original_globals = list(globals().keys())
+    original_modules: set[str] = set(sys.modules.keys())
+    original_globals: set[str] = set(globals().keys())
 
     try:
         os.chdir(script_dir)
-        sys.path.insert(0, script_dir)  # Important: insert at front
+        # Important: insert at front
+        sys.path.insert(0, script_dir)
         sys.dont_write_bytecode = True
 
         yield
 
     finally:
-        # Restore previous values
+        # Restore environment
         os.chdir(original_cwd)
         sys.path[:] = original_sys_path
         sys.dont_write_bytecode = original_dont_write_bytecode
@@ -230,19 +238,19 @@ def run_in_context(script_path: str | os.PathLike[str]) -> Iterator[None]:
 
 
 class TEXT_OT_debug_run(bpy.types.Operator):
-    """Run the current text as a script compatible with the VS Code Debugger"""
+    """Run current text block as a standalone script (debug-friendly)"""
 
     bl_idname = "text.debug_run"
     bl_label = "Debug"
     bl_description = "Run the current script (Debug mode)"
-    bl_options = {"REGISTER"}
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         # Get the current text editor
         text = context.space_data.text
 
         if not text:
-            self.report({"ERROR"}, "No text block to run")
+            self.report({"ERROR"}, "No text block open")
             return {"CANCELLED"}
 
         if text.is_in_memory:
@@ -272,19 +280,18 @@ class TEXT_OT_debug_run(bpy.types.Operator):
             }
             with run_in_context(filepath):
                 # Work from the version saved on disk
-                with open(filepath, "r") as file:
-                    exec(
-                        compile(file.read(), filepath, "exec"),
-                        globals=global_namespace,
-                    )
+                with open(filepath, "r", encoding="utf-8") as f:
+                    code = compile(f.read(), str(filepath), "exec")
+                    exec(code, globals=global_namespace)
 
-            self.report({"INFO"}, f"Script executed: {filepath.name}")
+            self.report({"INFO"}, f"Script executed in debug mode: {filepath.name}")
             return {"FINISHED"}
 
         except Exception as e:
             # Show the error in the Info window and console
-            self.report({"ERROR"}, f"Error running script: {e}")
-            print(f"--- Debug Run Error in {text.name} ---")
+            msg = f"Error running script: {e}"
+            self.report({"ERROR"}, msg)
+            print(msg)
             import traceback
 
             traceback.print_exc()
@@ -294,14 +301,15 @@ class TEXT_OT_debug_run(bpy.types.Operator):
 # Draw the main menu entry for:
 #   {Blender Icon} -> System -> Debug: Start Debug Server
 #                             + Debug: Check if Client is Attached
-def draw_python_debugger_blender_system_menu(self, context):
+def draw_system_menu(self, context):
+    """Add entries to Blender → System menu"""
     if bpy.context.preferences.view.show_developer_ui:
         self.layout.separator(factor=1.0)
         self.layout.operator(DebugServerStart.bl_idname, icon="SCRIPT")
         self.layout.operator(DebuggerCheck.bl_idname, icon="SCRIPT")
 
 
-def draw_python_debugger_text_editor_menu(self, context):
+def draw_text_editor_header(self, context):
     """Draw function that gets appended to the Text Editor header"""
     layout = self.layout
 
@@ -319,9 +327,9 @@ def draw_python_debugger_text_editor_menu(self, context):
 # Registration
 #########################################################################
 _classes = (
+    DebuggerPreferences,
     DebuggerCheck,
     DebugServerStart,
-    DebuggerPreferences,
     TEXT_OT_debug_run,
 )
 
@@ -331,13 +339,13 @@ _register, _unregister = bpy.utils.register_classes_factory(_classes)
 
 def register():
     _register()
-    bpy.types.TOPBAR_MT_blender_system.append(draw_python_debugger_blender_system_menu)
-    bpy.types.TEXT_HT_header.append(draw_python_debugger_text_editor_menu)
+    bpy.types.TOPBAR_MT_blender_system.append(draw_system_menu)
+    bpy.types.TEXT_HT_header.append(draw_text_editor_header)
 
 
 def unregister():
-    bpy.types.TOPBAR_MT_blender_system.remove(draw_python_debugger_blender_system_menu)
-    bpy.types.TEXT_HT_header.remove(draw_python_debugger_text_editor_menu)
+    bpy.types.TOPBAR_MT_blender_system.remove(draw_system_menu)
+    bpy.types.TEXT_HT_header.remove(draw_text_editor_header)
     _unregister()
 
 
