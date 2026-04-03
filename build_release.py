@@ -1,4 +1,3 @@
-# !/usr/bin/env python3
 """
 This script adds a few niceties on top of the Blender extension builder:
 
@@ -26,6 +25,7 @@ BLENDER_PATH=/path/to/blender python3 build_release.py
 
 python build_release.py
 """
+
 import re
 import shutil
 import subprocess
@@ -203,7 +203,7 @@ def build_package(
 
     build_wheels_path = build_path / wheels_path
     wheels: Iterator[Path] = build_wheels_path.glob("*.whl")
-    wheels_toml = [p.relative_to(build_path).as_posix() for p in wheels]
+    wheels_toml = ["./" + p.relative_to(build_path).as_posix() for p in wheels]
     array = tomlkit.array()
     array.extend(wheels_toml)
     manifest["wheels"] = array.multiline(True)
