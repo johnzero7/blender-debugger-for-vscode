@@ -84,6 +84,9 @@ class DebuggerCheck(bpy.types.Operator):
     bl_label = "Debug: Check if Client is Attached"
     bl_description = "Starts modal timer that checks if debugger attached until attached or until timeout"
 
+    # Class variable to track if it's running
+    _is_running = False
+
     def modal(self, context, event):
         if event.type != "TIMER":
             return {"PASS_THROUGH"}
@@ -120,6 +123,12 @@ class DebuggerCheck(bpy.types.Operator):
         return {"PASS_THROUGH"}
 
     def execute(self, context):
+
+        if DebuggerCheck._is_running:
+            return {"CANCELLED"}
+
+        DebuggerCheck._is_running = True
+
         # set initial variables
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.2, window=context.window)
@@ -131,6 +140,7 @@ class DebuggerCheck(bpy.types.Operator):
         return {"RUNNING_MODAL"}
 
     def cleanup(self, context):
+        DebuggerCheck._is_running = False
         if self._timer:
             context.window_manager.event_timer_remove(self._timer)
             self._timer = None
