@@ -1,17 +1,17 @@
 schema_version = "1.0.0"
 
 
-id = "blender_python_debugger_for_vscode"
-name = "Blender Python Debugger for VS Code"
+id = "blender_python_debugger"
+name = "Blender Python Debugger"
 version = "3.0.0"
-tagline = "Blender addon for remote debugging python code with VS Code"
+tagline = "Blender addon for debugging python code"
 maintainer = "johnzero7 <johnzero7@gmail.com>"
 type = "add-on"
 tags = [
     "Development",
 ]
 
-website = "https://github.com/johnzero7/blender-python-debugger-for-vscode"
+website = "https://github.com/johnzero7/blender-python-debugger"
 
 license = [
     "SPDX:GPL-3.0-or-later",

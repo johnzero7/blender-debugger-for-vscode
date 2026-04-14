@@ -1,30 +1,27 @@
 # Why fork?
 This fork is for compatibility with the new extension system introduced in Blender 4.2.
-This new system allows to bundle dependencies, like debugpy, into the extension to simplify the installation process.
+This new system allows to bundle dependencies, like debugpy, into the extension package to simplify the installation process.
 
-# Blender Addon Debugger for VS Code
+# Blender Python Debugger
+![Image Showing VS Code side by side with Blender paused at a breakpoint. In the console, a "Debugger is Attached" Statement is printed.](./images/example.jpg)
 
 ## Inspiration / Credits
 
-This project is **based on** [blender-debugger-for-vscode](https://github.com/alanscodelog/blender-debugger-for-vscode), which was **inspired by** [Blender-VScode-Debugger](https://github.com/Barbarbarbarian/Blender-VScode-Debugger).
+[Blender Python Addon Debugger for VS Code](https://github.com/johnzero7/blender-python-debugger) is **based on** [blender-debugger-for-vscode](https://github.com/alanscodelog/blender-debugger-for-vscode), which was **inspired by** [Blender-VScode-Debugger](https://github.com/Barbarbarbarian/Blender-VScode-Debugger).
 That project was itself **inspired by** the [remote_debugger.py](https://github.com/sybrenstuvel/random-blender-addons/blob/master/remote_debugger.py) for PyCharm, as explained in the [Blender Developer's Blog post](https://code.blender.org/2015/10/debugging-python-code-with-pycharm/).
 
 # What it does:
-
-- Allows to set breakpoints, and debug installed addons in Blender using VS Code (or any other client using debugpy)
+This addon allows the user to debug python code of installed addons and standalone python scripts in the **Blender Text Editor**
+- Allows to set breakpoints, and debug installed addons in Blender using VS Code (or any other client implementing the Debug Protocal Adapted, DAP, like VS Code, Pycharm, Zed, etc )
 - Check if there is a client attached.
 
 ## It doesn't
-- Debug Python code from the Blender Text Editor
-- It Can't run a script from VS Code into Blender.
+- It doesn't run python scripts from and IDE into Blender.
 
-
-
-![Image Showing VS Code side by side with Blender paused at a breakpoint. In the console, a "Debugger is Attached" Statement is printed.](./images/example.jpg)
 
 # Requirements
 - Blender 4.2 or higher
-- VS Code
+- An IDE with DAP support (VS Code, Pycharm, Zed, etc)
 
 # How to Use
 
@@ -36,19 +33,22 @@ By default Blender hides developer/debug options.
 Go to Edit → Preferences → Interface and enable Developer Extras.
 !["Developer Extras" check is located in the Interface menu of the preferences](./images/blender-enable-developer-extras.jpg)
 
-#### Step 3: Locate the Add-on to Debug
+#### Step 3: Locate the Add-on/Script to Debug
 You can debug any installed add-on (or create your own). The only requirement is that the add-on must be installed and enabled.
 
-For this guide, we'll use the **Blender Addon Debugger for VS Code** as an example.
+For this guide, we'll use the **Blender Addon Debugger** as an example.
 
-Go to **Edit → Preferences → Extensions**, expand **Blender Addon Debugger for VS Code**, and click the **folder icon** next to the path to open the extension's installation folder.
+Go to **Edit → Preferences → Extensions**, expand **Blender Addon Debugger**, and click the **folder icon** next to the path to open the extension's installation folder.
 If the addon you are looking for is not here it might be a legacy addon, check in the **Add-ons** tab.
 ![The extensions Tab show the location of the installed addon](./images/blender-addon-location.jpg)
+For standalone scripts the sctipt needs to be in a folder accesible by blender so it can be opened in the Text Editor.
+
+Now we will use VS Code for this example
 
 #### Step 4: Open the folder in VS Code
-Open the folder in VS Code.
+Open the **folder** with the source in VS Code.
 ![This is an example of a launch.json file](./images/vscode-launch.jpg)
-Create a launch.json file. Add a configuration for Python Debugger: Remote Attach. The default values for host and port will be enogh. The only thing we need to change is **"remoteRoot"** to the same value of **"localRoot": "${workspaceFolder}"**.
+Create a launch.json file. Add a configuration for Python Debugger: Remote Attach. The default values for host and port will be enough. The only thing we need to change is **"remoteRoot"** to the same value of **"localRoot": "${workspaceFolder}"**.
 
 ```JSON
         {
@@ -62,14 +62,14 @@ Create a launch.json file. Add a configuration for Python Debugger: Remote Attac
             "pathMappings": [
                 {
                     "localRoot": "${workspaceFolder}",
-                    "remoteRoot": "." //change "." for "${workspaceFolder}" like the line above
+                    "remoteRoot": "." //change "." to "${workspaceFolder}" like the line above
                 }
             ]
         }
 ```
 
-#### Step 5: Start debuging
-In the menubar click on the Blender icon and open the System menu. The you will find two options.
+#### Step 5: Start the debug server
+In Blender go to the menubar and click on the Blender icon and open the System menu. The you will find two options (These can also be found in the search menu.)
 - **Debug: Start Debug Server**
 : Starts the debug server on the selected port and wait for a connection.
 - **Debug: Check if Client is Attached**
@@ -86,19 +86,14 @@ Notes:
 Now that the remote server is running we can establish a connection from VS Code. Go to VS Code, in the **Run & Debug** Tab select **Python Debugger: Remote Attach** and click the green Arrow or press F5.
 
 #### Step 7: Set Breakpoints and start debugging
-Everyting should be ready to start debugging, try seting a break point in the file **__init__.py**, in the operator **DebugServerStart** place a breakpoint in the first line inside the execute method. Now if you try running that operator in blender the window should freeze and the control should be tranfered to VS Code on the line we set the breakpoint.
+Everyting should be ready to start debugging, try seting a break point in the file `__init__.py`, in the operator **DebugServerStart** place a breakpoint in the first line inside the execute method. Now if you try running that operator in blender the window should freeze and the control should be tranfered to VS Code on the line we set the breakpoint.
 ![Execution of the operator is halted a the breakpoint](./images/vscode-breakpoint.jpg)
-
-
-## Note on Downloading
-
-Download from releases the version that corresponds to the version of Blender you are using. If you download or clone the repo you will need to build the package by running **build_releae.py**
 
 
 ## Setting up your scripts
 
 Blender currently has two systems to extend its functionality: Addons (legacy) and Extensions (new system).
-Addons and Extensions need to be edited in the location where they are installed in blender.
+Addons and Extensions need to be edited in the location where they are installed in Blender.
 
 
 ### Addons (legacy)
@@ -132,7 +127,7 @@ You can install from blender or copy the addon folder to the new location.
 
 The default folder for extensions is:
 ```
-C:\Users\<USER>\AppData\Roaming\Blender Foundation\Blender\4.X\extensions\<repo>
+C:\Users\<USER>\AppData\Roaming\Blender Foundation\Blender\4.2\extensions\<repo>
 ```
 
 To add a custom folder for Extensions
@@ -156,6 +151,12 @@ The folder structure must be the same than in the default local extension reposi
 https://docs.blender.org/manual/en/latest/editors/preferences/extensions.html#installing-extensions
 
 Blender does not support duplicated addons/extensions. If you have multiple copies installed in different folders uninstall them until only one is left.
+
+
+### Standalone scripts
+You can debug standalone scripts running then from the text editor using the button **Debug**
+![Run stand alone scripts from the text editor](./images/blender-text-editor.jpg)
+
 
 # Useful tips
 ### Editing while debuging
@@ -207,25 +208,64 @@ def load_handler(dummy):
 	# remove handler so it only runs once
    bpy.app.handlers.load_post.remove(load_handler)
    if bpy.app.background:
-      bpy.ops.debug.connect_debugger_vscode(waitForClient=True)
+      bpy.ops.debug.connect_debugger(waitForClient=True)
 
 ```
 See [Application Handlers](https://docs.blender.org/api/current/bpy.app.handlers.html)
 
-### Debugging/Editing Source Code
+### Editing Source Code while debugging
 
-It is possible to edit the Blender source code but it can be a bit tricky to get it to detect changes (nevermind live editing is buggy anyways).
+You can't live edit the code, but you can update and appply changes to the code.
 
-From blender you can right click just about anything and click "Edit Source" to get it in the text editor. Then to find the path of the file, go to `Text > Save As` and copy it from there.
+For stand alone scripts you can edit the code clicking the button "Debug" in the text editor.
+All changes saved to disk will be executed.
 
-Open the file in VS Code, connect to the debugging server, make a change and save it.
+For Addons you will need to force Blender to reload the python code.
+In the menubar click on the Blender icon, select 'System > Reload Scripts' (or same name in the search tool)
+This will make Blender reload all python code.
+But ther is a problem, modules previously imported will not be updated. This is a feature of Python to prevent reload modules already loaded.
+To circunvent this you will need to programatically reimport the module using the importlib module.
 
-Now in Blender the text editor will show this little red button in the top left. Click that and reload the file. Then in `Text Editor > Properties` turn on `Live Edit` if you haven't already. Now to actually get Blender to detect any changes you made just type a single character (like add a space anywhere) and *then* it will detect your changes.
+For example if you imported the module mymodule like this
+```
+import mymodule
+```
+you will need to dinamically force reloading the module
+
+```
+import sys
+import importlib
+
+if 'mymodule' in sys.modules:
+    importlib.reload(mymodule)
+import mymodule
+
+```
+You only need to reload modules if you modify the code.
+
 
 # Troubleshooting
 
-- To determine whether the problem is on Blender's side or your editor's: Close Blender and install debugpy this [test script](https://github.com/AlansCodeLog/blender-debugger-for-vscode/blob/master/test.py), you can copy/download it or run it from the addon folder. Run it with Python `python test.py`, and then try to connect to the server with your editor. If you're still getting problems then the problem is with VS Code, try:
-    - Check your detected your Python install, or set it manually.
-    - For VS Code try reinstalling the VS Code Python extension.
+- To determine whether the problem is on Blender's side or your editor's: Close Blender and install
+debugpy this [test script](https://github.com/AlansCodeLog/blender-debugger-for-vscode/blob/master/test.py),
+you can copy/download it or run it from the addon folder. Run it with Python `python test.py`,
+and then try to connect to the server with your editor.
+
+# Notes About IDEs
+In some IDEs, like Pycharm, when you stop/rerun the cliente connection it also kills
+the subprocess running the debug server.
+As a consecuence you will not be able to reconnect to the remote server, because the subprocess is dead.
+And you will not be able to start a new remote server because internal flags still think the subproccess exists.
+In some cases it will even kill the Blender process. So be careful to not stop/rerun the the connection.
+The only solution for now is to restart Blender.
+
+VS Code is the only one I tested that works well and does not kill the process or subprocess when stoping or restarting the connection.
+
+
+# Note on Downloading
+
+Download from releases the version that corresponds to the version and platform of Blender you are using.
+If you download or clone the repo you will need to build the package by running **build_releae.py**.
+This will download the dependencies (debugpy) and generate a package for each platform available.
 
 

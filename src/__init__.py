@@ -16,8 +16,8 @@
 
 
 """
-Start a debug server to debug addons and python code in blender
-Allows to debug Blender addons and python scripts with the VS Code Debugger using debugpy.
+Allows to debug Blender addons and python scripts in VS Code, or any other IDE
+that implements the Debug Protocol Adapter (DAP) like Pycharm, Zed, etc.
 Inspired by: https://github.com/AlansCodeLog/blender-debugger-for-vscode
 
 Notes:
@@ -45,7 +45,7 @@ class DebuggerPreferences(bpy.types.AddonPreferences):
     host: bpy.props.StringProperty(
         name="Host",
         default="127.0.0.1",
-        description="Remote host to accept connections. If 0.0.0.0 will accept connections from any host. Should match host in VS Code's launch.json",
+        description="Remote host to accept connections from. 0.0.0.0 will accept connections from any host.",
     )
 
     port: bpy.props.IntProperty(
@@ -53,7 +53,7 @@ class DebuggerPreferences(bpy.types.AddonPreferences):
         min=1024,
         max=65535,
         default=5678,
-        description="Port to use. Should match port in VS Code's launch.json",
+        description="Port to use.",
     )
 
     timeout: bpy.props.IntProperty(
@@ -157,14 +157,14 @@ class DebugServerStart(bpy.types.Operator):
     Initialize the debug server then poll for a client connection
     """
 
-    bl_idname = "debug.connect_debugger_vscode"
+    bl_idname = "debug.connect_debugger"
     bl_label = "Debug: Start Debug Server"
     bl_description = "Starts debugpy server for debugger to attach to"
 
     wait_for_client: bpy.props.BoolProperty(
         name="Wait for Client",
         default=False,
-        description="Block until VS Code attaches (recommended for first-time setup)",
+        description="Block until client attaches (recommended for first-time setup)",
     )
 
     def execute(self, context):
@@ -172,7 +172,8 @@ class DebugServerStart(bpy.types.Operator):
 
         # can only be attached once, no way to detach (at least not that I understand?)
         try:
-            debugpy.listen((prefs.host, prefs.port))
+            address = (prefs.host, prefs.port)
+            debugpy.listen(address)
         except RuntimeError as e:
             # Usually means already listening
             msg = f"Debugger already listening on port {prefs.port} or failed: {e}"
