@@ -1,4 +1,4 @@
-name: Release Blender Addon
+name: Release Blender Addon test
 
 on:
   push:
