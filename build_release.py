@@ -26,13 +26,13 @@ BLENDER_PATH=/path/to/blender python3 build_release.py
 python build_release.py
 """
 
+import os
 import re
 import shutil
 import subprocess
 import zipfile
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from os import PathLike, environ
 from pathlib import Path
 from typing import Any, Optional
 
@@ -50,13 +50,31 @@ blender_platforms: list[str] = [
 ]
 
 
-def run_platform(
+def blender_build_package(build_path: str, release_path: str) -> None:
+    """Run blender commandline to generate the extension packages"""
+    cmd = [
+        os.environ["BLENDER_PATH"],
+        "--factory-startup",
+        "--command",
+        "extension",
+        "build",
+        "--verbose",
+        "--split-platforms",
+        "--source-dir",
+        build_path,
+        "--output-dir",
+        release_path,
+    ]
+    subprocess.run(cmd)
+
+
+def download_dependencies_wheels(
     py_tag: str,
     py_platform: str,
-    wheels_path: PathLike[str] | str,
-    build_path: PathLike[str] | str,
+    wheels_path: os.PathLike[str] | str,
+    build_path: os.PathLike[str] | str,
 ) -> tuple[str, str, bool, Any]:
-    """Function that runs one subprocess"""
+    """Download the dependencies wheels for the specified Python version and platform using pip."""
     cmd = [
         "py",
         "-m",
@@ -89,11 +107,19 @@ def run_platform(
         return py_tag, py_platform, False, str(e)
 
 
-def get_version() -> str | None:
+def get_current_commit_version(branch: Optional[str]) -> str | None:
+    """Get the version from the Git tag of the current commit if it matches the pattern v*.
+
+    Returns:
+        The version string without the 'v' prefix, or None if no matching tag is found.
+    """
+    cmd = ["git", "describe", "--tags", "--exact-match", "--match", "v*"]
+    if branch:
+        cmd.append(branch)
     try:
         my_tag = (
             subprocess.check_output(
-                ["git", "describe", "--tags", "--exact-match", "--match", "v*"],
+                cmd,
                 stderr=subprocess.DEVNULL,
             )
             .decode("utf-8")
@@ -104,44 +130,116 @@ def get_version() -> str | None:
         return None
 
 
-def get_fake_version(current_version: Optional[str] = None) -> str:
-    invalid_ver: bool = current_version is None or not re.search(
-        r"^\d+\.\d+\.\d+$", current_version
-    )
-    if invalid_ver:
-        try:
-            raw_tag = (
-                subprocess.check_output(
-                    ["git", "describe", "--tags", "--match", "v*"],
-                    stderr=subprocess.DEVNULL,
-                )
-                .decode("utf-8")
-                .strip()
+def get_most_recent_tag_version(branch: Optional[str]) -> str:
+    """Get the version from the Git tag of the most recent commit if it matches the pattern v*.
+
+    Returns:
+        The version string without the 'v' prefix, or "0.0.0" if no matching tag is found.
+    """
+    default = "0.0.0"
+    cmd = ["git", "describe", "--tags", "--match", "v*"]
+    if branch:
+        cmd.append(branch)
+    try:
+        raw_tag = (
+            subprocess.check_output(
+                cmd,
+                stderr=subprocess.DEVNULL,
             )
-            tag_parts = re.match(r"^v(\d+\.\d+\.\d+)-(\d+)-([a-z0-9]+)$", raw_tag)
-            current_version = "0.0.0" if tag_parts is None else tag_parts.group(1)
-        except subprocess.CalledProcessError:
-            current_version = "0.0.0"
-            pass
-    cmd = ["git", "rev-parse", "--short", "HEAD"]
-    hash = (
-        subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").strip()
+            .decode("utf-8")
+            .strip()
+        )
+        tag_parts = re.match(r"^v(\d+\.\d+\.\d+)-(\d+)-(\w+)$", raw_tag)
+        return default if tag_parts is None else tag_parts.group(1)
+    except subprocess.CalledProcessError:
+        return default
+
+
+def get_current_commit_hash(branch: Optional[str] = None) -> str:
+    """Get the short hash of the current Git commit.
+
+    Returns:
+        The short hash string, or "unknown" if it cannot be retrieved.
+    """
+    ref = branch or "HEAD"
+    cmd = ["git", "rev-parse", "--short", ref]
+    try:
+        hash = (
+            subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
+            .decode("utf-8")
+            .strip()
+        )
+        return hash
+    except subprocess.CalledProcessError:
+        return "unknown"
+
+
+def is_version_valid(current_version: Optional[str]) -> bool:
+    """Check if the provided version string is in the format MAJOR.MINOR.PATCH.
+
+    Args:
+        current_version: The version string to validate.
+
+    Returns:
+        True if the version is valid, False otherwise.
+    """
+    is_valid: bool = bool(
+        current_version is not None and re.search(r"^\d+\.\d+\.\d+$", current_version)
     )
-    parts = current_version.split(".")
-    return ".".join(parts[0:2] + [str(int(parts[2]) + 1)]) + "-dev-" + hash
+    return is_valid
+
+
+def get_fake_version(
+    current_version: Optional[str] = None, branch: Optional[str] = None
+) -> str:
+    """Generate a fake version string for development builds when no Git tag is available.
+
+    Args:
+        current_version: The current version from the manifest, if available.
+        branch: The Git branch to use for version detection.
+
+    Returns:
+        A version string in the format MAJOR.MINOR.(PATCH+1)-dev-SHORT_HASH.
+    """
+
+    version = current_version or "0.0.0"
+    if not is_version_valid(current_version):
+        version = get_most_recent_tag_version(branch)
+    hash = get_current_commit_hash(branch)
+    major, minor, patch = version.split(".")
+    updated_patch = ".".join([major, minor, str(int(patch) + 1)])
+    return "-".join([updated_patch, "dev", hash])
 
 
 def build_package(
     py_tag: str,
-    platforms: list,
-    manifest_overrides: dict,
+    platforms: list[str],
+    manifest_overrides: dict[str, Any],
+    *,
+    branch: Optional[str] = None,
     src_folder: str = "src",
     build_folder: str = "build",
     release_folder: str = "releases",
 ) -> None:
+    """Build the Blender extension package for a specific Python version.
+
+    Downloads required wheels, updates the manifest with version and wheels,
+    and builds the extension packages using Blender's command line tool.
+
+    Args:
+        py_tag: The Python version tag (e.g., "3.11").
+        platforms: List of platform strings for wheel downloads.
+        manifest_overrides: Dictionary of overrides for the manifest.
+        src_folder: Source folder name (default "src").
+        build_folder: Build folder name (default "build").
+        release_folder: Release folder name (default "releases").
+
+    Raises:
+        RuntimeError: If BLENDER_PATH is not set or invalid, or if no ZIP files are produced.
+    """
     if (
-        environ.get("BLENDER_PATH") is None
-        or shutil.which(environ["BLENDER_PATH"]) is None
+        os.environ.get("BLENDER_PATH") is None
+        or shutil.which(os.environ["BLENDER_PATH"]) is None
     ):
         raise RuntimeError(
             "BLENDER_PATH environment variable must be set to the path of the Blender executable."
@@ -181,7 +279,9 @@ def build_package(
     # download all the required wheels
     with ProcessPoolExecutor(max_workers=4) as executor:
         future_to_platform = {
-            executor.submit(run_platform, py_tag, p, wheels_path, build_path): p
+            executor.submit(
+                download_dependencies_wheels, py_tag, p, wheels_path, build_path
+            ): p
             for p in platforms
         }
 
@@ -190,11 +290,11 @@ def build_package(
 
     # Update the version
     manifest_version: Optional[str] = str(manifest["version"])
-    version: Optional[str] = get_version()
+    version: Optional[str] = get_current_commit_version(branch)
     fake_version: Optional[str] = None
 
     if version is None:
-        fake_version = get_fake_version(manifest_version)
+        fake_version = get_fake_version(manifest_version, branch)
         print(
             f"There is no version tag on this commit, so using a temporary build version of {fake_version}"
         )
@@ -219,21 +319,7 @@ def build_package(
     with open(build_path / "blender_manifest.toml", "w") as out_file:
         tomlkit.dump(manifest, out_file)
 
-    # Run blender commandline to generate the packages
-    cmd = [
-        environ["BLENDER_PATH"],
-        "--factory-startup",
-        "--command",
-        "extension",
-        "build",
-        "--verbose",
-        "--split-platforms",
-        "--source-dir",
-        build_path,
-        "--output-dir",
-        release_path,
-    ]
-    subprocess.run(cmd)
+    blender_build_package(str(build_path), str(release_path))
 
     zips = list(release_path.glob("*.zip"))
     if not zips:
@@ -268,7 +354,6 @@ if __name__ == "__main__":
         manifest_overrides={
             "blender_version_min": "4.2.0",  # Introduced extensions. Python 3.11
             "blender_version_max": "5.1.0",  # optional but recommended
-            "version": "3.0.0",  # you can bump per target if you want
         },
     )
 
@@ -278,6 +363,5 @@ if __name__ == "__main__":
         platforms=platforms,
         manifest_overrides={
             "blender_version_min": "5.1.0",
-            "version": "3.0.0",
         },
     )

@@ -3,7 +3,7 @@ schema_version = "1.0.0"
 
 id = "blender_python_debugger"
 name = "Blender Python Debugger"
-version = "3.0.0"
+version = "X.Y.Z"
 tagline = "Blender addon for debugging python code"
 maintainer = "johnzero7 <johnzero7@gmail.com>"
 type = "add-on"
