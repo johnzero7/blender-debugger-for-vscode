@@ -347,16 +347,6 @@ if __name__ == "__main__":
         "manylinux_2_34_x86_64",
     ]
 
-    # Build for Python 3.11 Blender >=4.2
-    build_package(
-        py_tag="3.11",
-        platforms=platforms,
-        manifest_overrides={
-            "blender_version_min": "4.2.0",  # Introduced extensions. Python 3.11
-            "blender_version_max": "5.1.0",  # optional but recommended
-        },
-    )
-
     # Build for Python 3.13 Blender >=5.1
     build_package(
         py_tag="3.13",
